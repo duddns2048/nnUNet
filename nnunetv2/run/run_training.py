@@ -40,7 +40,8 @@ def get_trainer_from_args(dataset_name_or_id: Union[int, str],
                           save_every: int=10,
                           num_epochs: int=200,
                           loss:str='base',
-                          cldice_alpha: float=0.5):
+                          cldice_alpha: float=0.5,
+                          only_run_validation:str=''):
     # load nnunet class and do sanity checks
     nnunet_trainer = recursive_find_python_class(join(nnunetv2.__path__[0], "training", "nnUNetTrainer"),
                                                 trainer_name, 'nnunetv2.training.nnUNetTrainer')
@@ -74,7 +75,8 @@ def get_trainer_from_args(dataset_name_or_id: Union[int, str],
                                     save_every=save_every,
                                     num_epochs=num_epochs,
                                     loss=loss,
-                                    cldice_alpha=cldice_alpha)
+                                    cldice_alpha=cldice_alpha,
+                                    only_run_validation=only_run_validation)
     return nnunet_trainer
 
 
@@ -214,7 +216,7 @@ def run_training(dataset_name_or_id: Union[str, int],
                  join=True)
     else:
         nnunet_trainer = get_trainer_from_args(dataset_name_or_id, configuration, fold, trainer_class_name,
-                                               plans_identifier, use_compressed_data, device=device, exp_name=exp_name, save_every=save_every, num_epochs=num_epochs, loss=loss, cldice_alpha=cldice_alpha)
+                                               plans_identifier, use_compressed_data, device=device, exp_name=exp_name, save_every=save_every, num_epochs=num_epochs, loss=loss, cldice_alpha=cldice_alpha, only_run_validation=only_run_validation)
 
         if disable_checkpointing:
             nnunet_trainer.disable_checkpointing = disable_checkpointing

@@ -76,7 +76,8 @@ class nnUNetTrainer(object):
                  save_every: int=10,
                  num_epochs: int=200,
                  loss:str='base',
-                 cldice_alpha: float=0.5):
+                 cldice_alpha: float=0.5,
+                 only_run_validation:bool=False):
         # From https://grugbrain.dev/. Worth a read ya big brains ;-)
 
         # apex predator of grug is complexity
@@ -175,6 +176,10 @@ class nnUNetTrainer(object):
         # initialize log file. This is just our log for the print statements etc. Not to be confused with lightning
         # logging
         timestamp = datetime.now()
+        if (only_run_validation) and (not os.path.exists(self.output_folder)):
+            print("Error: Validation folder is not correctly specified!")
+            sys.exit(1)
+            
         maybe_mkdir_p(self.output_folder)
         self.log_file = join(self.output_folder, "training_log_%d_%d_%d_%02.0d_%02.0d_%02.0d.txt" %
                              (timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.minute,

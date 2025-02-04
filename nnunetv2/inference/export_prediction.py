@@ -200,7 +200,7 @@ def save_segmentation_mask(input_seg_map: np.ndarray, filename: str = "segmentat
     seg_map = copy.deepcopy(input_seg_map)
     seg_map = seg_map[0]
     # 0과 255 값으로 변환 (0: 배경, 255: 전경)
-    mask_2d = (mask_2d * 255).astype(np.uint8)
+    mask_2d = (seg_map * 255).astype(np.uint8)
 
     # PNG로 저장
     image = Image.fromarray(mask_2d)
