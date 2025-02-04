@@ -1,0 +1,26 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["600", "2d", "1", 
+            "-exp_name", "cldice_0.1", 
+            // "-num_epochs", "30", 
+            // "-save_every", "1", 
+            // "-cldice_alpha", "0.5",
+            // "-loss", "soft_dice_cldice"
+            "-val",
+            "--npz",
+            "-validation_ckpt", "1"
+        ]
+        }
+    ]
+}
