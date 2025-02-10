@@ -72,8 +72,10 @@ def convert_predicted_logits_to_segmentation_with_correct_shape(predicted_logits
 def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, torch.Tensor], properties_dict: dict,
                                   configuration_manager: ConfigurationManager,
                                   plans_manager: PlansManager,
-                                  dataset_json_dict_or_file: Union[dict, str], output_file_truncated: str,
-                                  save_probabilities: bool = False):
+                                  dataset_json_dict_or_file: Union[dict, str], validation_output_folder: str,
+                                  save_probabilities: bool = False,
+                                  k:str='',
+                                  validation_ckpt:str=None):
     # if isinstance(predicted_array_or_file, str):
     #     tmp = deepcopy(predicted_array_or_file)
     #     if predicted_array_or_file.endswith('.npy'):
@@ -95,18 +97,18 @@ def export_prediction_from_logits(predicted_array_or_file: Union[np.ndarray, tor
     # save
     if save_probabilities:
         segmentation_final, probabilities_final = ret
-        np.savez_compressed(output_file_truncated + '.npz', probabilities=probabilities_final)
-        save_probability_heatmap(probabilities_final[1], output_file_truncated+'_heatmap.png')
-        save_probability_contour(probabilities_final[1], output_file_truncated+'_contour.png')
-        save_segmentation_mask(segmentation_final, output_file_truncated+'_mask.png')
-        save_pickle(properties_dict, output_file_truncated + '.pkl')
+        np.savez_compressed(validation_output_folder+'/probability/' +k+ '_'+str(validation_ckpt)+'.npz', probabilities=probabilities_final)
+        save_probability_heatmap(probabilities_final[1], validation_output_folder+'/heatmap/'+k+'_'+str(validation_ckpt)+'_heatmap.png')
+        save_probability_contour(probabilities_final[1], validation_output_folder+'/contour/'+k+'_'+str(validation_ckpt)+'_contour.png')
+        save_segmentation_mask(segmentation_final, validation_output_folder+'/mask/'+k+'_'+str(validation_ckpt)+'_mask.png')
+        save_pickle(properties_dict, validation_output_folder + '.pkl')
         del probabilities_final, ret
     else:
         segmentation_final = ret
         del ret
 
     rw = plans_manager.image_reader_writer_class()
-    rw.write_seg(segmentation_final, output_file_truncated + dataset_json_dict_or_file['file_ending'],
+    rw.write_seg(segmentation_final, validation_output_folder + f'/{k}' + dataset_json_dict_or_file['file_ending'],
                  properties_dict)
 
 

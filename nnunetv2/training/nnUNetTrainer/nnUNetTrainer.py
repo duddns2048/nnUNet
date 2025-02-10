@@ -55,7 +55,7 @@ from nnunetv2.training.dataloading.data_loader_3d import nnUNetDataLoader3D
 from nnunetv2.training.dataloading.nnunet_dataset import nnUNetDataset
 from nnunetv2.training.dataloading.utils import get_case_identifiers, unpack_dataset
 from nnunetv2.training.logging.nnunet_logger import nnUNetLogger
-from nnunetv2.training.loss.compound_losses import DC_and_CE_loss, DC_and_BCE_loss, soft_dice_cldice
+from nnunetv2.training.loss.compound_losses import DC_and_CE_loss, DC_and_BCE_loss, soft_dice_cldice, dice_clCE_loss,CE_cldice_loss,CE_clCE_loss
 from nnunetv2.training.loss.deep_supervision import DeepSupervisionWrapper
 from nnunetv2.training.loss.dice import get_tp_fp_fn_tn, MemoryEfficientSoftDiceLoss
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
@@ -68,6 +68,9 @@ from nnunetv2.utilities.helpers import empty_cache, dummy_context
 from nnunetv2.utilities.label_handling.label_handling import convert_labelmap_to_one_hot, determine_num_input_channels
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
 
+from nnunetv2.training.loss.robust_ce_loss import RobustCrossEntropyLoss, TopKLoss
+from nnunetv2.utilities.helpers import softmax_helper_dim1
+
 
 class nnUNetTrainer(object):
     def __init__(self, plans: dict, configuration: str, fold: int, dataset_json: dict, unpack_dataset: bool = True,
@@ -77,7 +80,8 @@ class nnUNetTrainer(object):
                  num_epochs: int=200,
                  loss:str='base',
                  cldice_alpha: float=0.5,
-                 only_run_validation:bool=False):
+                 only_run_validation:bool=False,
+                 enable_deep_supervision:bool=False):
         # From https://grugbrain.dev/. Worth a read ya big brains ;-)
 
         # apex predator of grug is complexity
@@ -157,7 +161,7 @@ class nnUNetTrainer(object):
         self.num_val_iterations_per_epoch = 50
         self.num_epochs = num_epochs
         self.current_epoch = 0
-        self.enable_deep_supervision = True
+        self.enable_deep_supervision = enable_deep_supervision
         self.cldice_alpha = cldice_alpha
 
         ### Dealing with labels/regions
@@ -238,7 +242,7 @@ class nnUNetTrainer(object):
                 self.network = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.network)
                 self.network = DDP(self.network, device_ids=[self.local_rank])
 
-            self.loss = self._build_loss(self.loss_fn, self.cldice_alpha)
+            self.loss = self._build_loss(self.loss_fn, self.cldice_alpha, self.enable_deep_supervision)
             # torch 2.2.2 crashes upon compiling CE loss
             # if self._do_i_compile():
             #     self.loss = torch.compile(self.loss)
@@ -398,7 +402,7 @@ class nnUNetTrainer(object):
             self.batch_size = batch_size_per_GPU[my_rank]
             self.oversample_foreground_percent = oversample_percent
 
-    def _build_loss(self, loss_fn, cldice_alpha):
+    def _build_loss(self, loss_fn, cldice_alpha, enable_deep_supervision):
         if self.label_manager.has_regions:
             loss = DC_and_BCE_loss({},
                                    {'batch_dice': self.configuration_manager.batch_dice,
@@ -406,12 +410,23 @@ class nnUNetTrainer(object):
                                    use_ignore_label=self.label_manager.ignore_label is not None,
                                    dice_class=MemoryEfficientSoftDiceLoss)
         else:
-            if loss_fn == 'soft_dice_cldice':
-                loss = soft_dice_cldice(do_bg=False, alpha =cldice_alpha)
-            else:
+            if loss_fn == 'base':
                 loss = DC_and_CE_loss({'batch_dice': self.configuration_manager.batch_dice,
                                     'smooth': 1e-5, 'do_bg': False, 'ddp': self.is_ddp}, {}, weight_ce=1, weight_dice=1,
                                     ignore_label=self.label_manager.ignore_label, dice_class=MemoryEfficientSoftDiceLoss)        
+            elif loss_fn == 'only_ce':
+                loss = RobustCrossEntropyLoss()
+            elif loss_fn == 'only_dice':
+                loss = MemoryEfficientSoftDiceLoss(softmax_helper_dim1, self.configuration_manager.batch_dice,
+                                     False, 1e-5, self.is_ddp)
+            elif loss_fn == 'soft_dice_cldice':
+                loss = soft_dice_cldice(do_bg=False, alpha =cldice_alpha)
+            elif loss_fn == 'soft_dice_clCE':
+                loss = dice_clCE_loss(do_bg=False, weight_clCE = cldice_alpha)
+            elif loss_fn == 'CE_cldice':
+                loss = CE_cldice_loss(weight_cldice = cldice_alpha)
+            elif loss_fn == 'CE_clCE':
+                loss = CE_clCE_loss(weight_clCE = cldice_alpha)
         # if self._do_i_compile():
         #     loss.dc = torch.compile(loss.dc)
 
@@ -430,7 +445,7 @@ class nnUNetTrainer(object):
                 weights[-1] = 0
 
             # we don't use the lowest 2 outputs. Normalize weights so that they sum to 1
-            weights = weights / weights.sum()
+            # weights = weights / weights.sum()
             # now wrap the loss
             loss = DeepSupervisionWrapper(loss, weights)
 
@@ -1004,6 +1019,7 @@ class nnUNetTrainer(object):
         # If the device_type is 'cpu' then it's slow as heck and needs to be disabled.
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
+        
         with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
             output = self.network(data)
             # del data
@@ -1251,11 +1267,16 @@ class nnUNetTrainer(object):
 
         with multiprocessing.get_context("spawn").Pool(default_num_processes) as segmentation_export_pool:
             worker_list = [i for i in segmentation_export_pool._pool]
-            if validation_ckpt != None:
-                validation_output_folder = join(self.output_folder, 'validation', f'ckeckpoint_latest_{validation_ckpt}')
-            else:
-                validation_output_folder = join(self.output_folder, 'validation', 'ckeckpoint_latest_200')
+            # if validation_ckpt != None:
+            #     validation_output_folder = join(self.output_folder, 'validation', f'ckeckpoint_latest_{validation_ckpt}')
+            # else:
+            #     validation_output_folder = join(self.output_folder, 'validation', 'ckeckpoint_latest_200')
+            validation_output_folder = join(self.output_folder, 'validation')
             maybe_mkdir_p(validation_output_folder)
+            maybe_mkdir_p(join(validation_output_folder,'probability'))
+            maybe_mkdir_p(join(validation_output_folder,'heatmap'))
+            maybe_mkdir_p(join(validation_output_folder,'contour'))
+            maybe_mkdir_p(join(validation_output_folder,'mask'))
 
             # we cannot use self.get_tr_and_val_datasets() here because we might be DDP and then we have to distribute
             # the validation keys across the workers.
@@ -1308,7 +1329,7 @@ class nnUNetTrainer(object):
                     segmentation_export_pool.starmap_async(
                         export_prediction_from_logits, (
                             (prediction, properties, self.configuration_manager, self.plans_manager,
-                             self.dataset_json, output_filename_truncated, save_probabilities),
+                             self.dataset_json, validation_output_folder, save_probabilities, k, validation_ckpt),
                         )
                     )
                 )
@@ -1360,7 +1381,7 @@ class nnUNetTrainer(object):
         if self.local_rank == 0:
             metrics = compute_metrics_on_folder(join(self.preprocessed_dataset_folder_base, 'gt_segmentations'),
                                                 validation_output_folder,
-                                                join(validation_output_folder, 'summary.json'),
+                                                join(validation_output_folder, f'summary_ckpt{validation_ckpt}.json'),
                                                 self.plans_manager.image_reader_writer_class(),
                                                 self.dataset_json["file_ending"],
                                                 self.label_manager.foreground_regions if self.label_manager.has_regions else

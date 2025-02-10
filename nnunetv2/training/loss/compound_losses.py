@@ -132,7 +132,90 @@ class soft_dice_cldice(nn.Module):
         tsens = (torch.sum(torch.multiply(y_skel, x))+self.smooth)/(torch.sum(y_skel)+self.smooth)    
         cl_dice = 1.- 2.0*(tprec*tsens)/(tprec+tsens)
         return (1.0-self.alpha)*dice+self.alpha*cl_dice
-    
+
+
+# Dice +clCE
+class dice_clCE_loss(nn.Module):
+    def __init__(self, do_bg, iter_=10, smooth=1.0, weight_clCE=1):
+        super(dice_clCE_loss, self).__init__()
+        self.iter = iter_
+        self.smooth = smooth
+        self.weight_clCE = weight_clCE
+        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
+        
+        self.do_bg = do_bg
+        self.apply_nonlin = softmax_helper_dim1
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor: # def forward(y_true, y_pred):
+        y_onehot = torch.zeros(x.shape, device=x.device)
+        y_onehot.scatter_(1, y.long(), 1) # nnUNet-training-loss-dice.py
+
+        cross_ent = torch.nn.functional.cross_entropy(x, y_onehot, reduction="none")
+        x = x.softmax(dim=1)
+
+        dice = soft_dice(y_onehot, x,)
+
+        skel_pred = self.soft_skeletonize(x)
+        skel_true = self.soft_skeletonize(y_onehot)
+        tprec = torch.mul(cross_ent, skel_true[:,1]).mean()
+        tsens = torch.mul(cross_ent, skel_pred[:,1]).mean()
+        cl_ce = (tprec+tsens)
+        result = (1.0 - self.weight_clCE) * dice + self.weight_clCE * cl_ce
+        return result
+
+
+class CE_cldice_loss(nn.Module):
+    def __init__(self, ce_kwargs, iter_=10, smooth=1.0, weight_cldice=1, ignore_label=None):
+        super(CE_cldice_loss, self).__init__()
+        if ignore_label is not None:
+            ce_kwargs['ignore_index'] = ignore_label
+        self.iter_ = iter_
+        self.smooth = smooth
+        self.weight_cldice = weight_cldice
+        self.ignore_label = ignore_label
+        self.ce = RobustCrossEntropyLoss(**ce_kwargs)
+
+    def forward(self, net_output: torch.Tensor, target: torch.Tensor):
+        ce_loss = self.ce(net_output, target[:, 0]) \
+            if self.weight_ce != 0 and (self.ignore_label is None) else 0
+
+        target_oh = torch.zeros(net_output.shape, device=net_output.device)
+        target_oh.scatter_(1, target.long(), 1) # nnUNet-training-loss-dice.py
+
+        net_output=net_output.softmax(dim=1)
+        skel_true = SoftSkeletonize(target_oh, self.iter_)
+        skel_pred = SoftSkeletonize(net_output, self.iter_)
+        #tprec = (torch.sum(torch.multiply(skel_pred, target[:, 0])[:,1:,...])+self.smooth)/(torch.sum(skel_pred[:,1:,...])+self.smooth)
+        tprec = (torch.sum(torch.multiply(skel_pred, target_oh)[:,1:,...])+self.smooth)/(torch.sum(skel_pred[:,1:,...])+self.smooth)
+        tsens = (torch.sum(torch.multiply(skel_true, net_output)[:,1:,...])+self.smooth)/(torch.sum(skel_true[:,1:,...])+self.smooth)
+        cl_dice = 1.0- 2.0*(tprec*tsens)/(tprec+tsens)
+
+        ##Total loss computation##
+        result = (1.0 -self.weight_cldice) * ce_loss + self.weight_cldice * cl_dice
+        return result
+
+class CE_clCE_loss(nn.Module):
+    def __init__(self, ce_kwargs, iter_=10, weight_clCE=1):
+        super(CE_clCE_loss, self).__init__()
+        self.iter = iter_
+        self.ce = RobustCrossEntropyLoss(**ce_kwargs)
+        self.weight_clCE = weight_clCE
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor: # def forward(y_true, y_pred):
+        y_true_oh = torch.zeros(y_pred.shape, device=y_pred.device)
+        y_true_oh.scatter_(1, y_true.long(), 1) # nnUNet-training-loss-dice.py
+
+        ce_loss = self.ce(y_pred, y_true[:, 0])
+        cross_ent = torch.nn.functional.cross_entropy(y_pred, y_true_oh, reduction="none")
+        y_pred = y_pred.softmax(dim=1)
+        skel_pred = SoftSkeletonize(y_pred, self.iter)
+        skel_true = SoftSkeletonize(y_true_oh, self.iter)
+        tprec = torch.mul(cross_ent, skel_true[:,1]).mean()
+        tsens = torch.mul(cross_ent, skel_pred[:,1]).mean()
+        cl_ce = (tprec+tsens)
+        result = (1.0 - self.weight_clCE) * ce_loss + self.weight_clCE * cl_ce
+        return result
+
 class DC_and_topk_loss(nn.Module):
     def __init__(self, soft_dice_kwargs, ce_kwargs, weight_ce=1, weight_dice=1, ignore_label=None):
         """

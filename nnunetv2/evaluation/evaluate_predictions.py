@@ -85,6 +85,43 @@ def compute_tp_fp_fn_tn(mask_ref: np.ndarray, mask_pred: np.ndarray, ignore_mask
     tn = np.sum(((~mask_ref) & (~mask_pred)) & use_mask)
     return tp, fp, fn, tn
 
+from skimage.morphology import skeletonize
+# from skimage.morphology import skeletonize, skeletonize_3d
+import numpy as np
+
+def cl_score(v, s):
+    """[this function computes the skeleton volume overlap]
+
+    Args:
+        v ([bool]): [image]
+        s ([bool]): [skeleton]
+
+    Returns:
+        [float]: [computed skeleton volume intersection]
+    """
+    return np.sum(v*s)/np.sum(s)
+
+
+def clDice(v_p, v_l):
+    """[this function computes the cldice metric]
+
+    Args:
+        v_p ([bool]): [predicted image]
+        v_l ([bool]): [ground truth image]
+
+    Returns:
+        [float]: [cldice metric]
+    """
+    v_p = v_p.squeeze()
+    v_l = v_l.squeeze()
+    if len(v_p.shape)==2:
+        tprec = cl_score(v_p,skeletonize(v_l))
+        tsens = cl_score(v_l,skeletonize(v_p))
+    # elif len(v_p.shape)==3:
+    #     tprec = cl_score(v_p,skeletonize_3d(v_l))
+    #     tsens = cl_score(v_l,skeletonize_3d(v_p))
+    return 2*tprec*tsens/(tprec+tsens)
+
 
 def compute_metrics(reference_file: str, prediction_file: str, image_reader_writer: BaseReaderWriter,
                     labels_or_regions: Union[List[int], List[Union[int, Tuple[int, ...]]]],
@@ -116,6 +153,7 @@ def compute_metrics(reference_file: str, prediction_file: str, image_reader_writ
         results['metrics'][r]['TN'] = tn
         results['metrics'][r]['n_pred'] = fp + tp
         results['metrics'][r]['n_ref'] = fn + tp
+        results['metrics'][r]['clDice'] = clDice(mask_ref, mask_pred)
     return results
 
 
@@ -125,7 +163,8 @@ def compute_metrics_on_folder(folder_ref: str, folder_pred: str, output_file: st
                               regions_or_labels: Union[List[int], List[Union[int, Tuple[int, ...]]]],
                               ignore_label: int = None,
                               num_processes: int = default_num_processes,
-                              chill: bool = True) -> dict:
+                              chill: bool = True,
+                              ) -> dict:
     """
     output_file must end with .json; can be None
     """
