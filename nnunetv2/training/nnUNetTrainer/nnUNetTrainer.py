@@ -232,9 +232,9 @@ class nnUNetTrainer(object):
                 self.enable_deep_supervision
             ).to(self.device)
             # compile network for free speedup
-            # if self._do_i_compile():
-            #     self.print_to_log_file('Using torch.compile...')
-            #     self.network = torch.compile(self.network)
+            if self._do_i_compile():
+                self.print_to_log_file('Using torch.compile...')
+                self.network = torch.compile(self.network)
 
             self.optimizer, self.lr_scheduler = self.configure_optimizers()
             # if ddp, wrap in DDP wrapper
@@ -244,8 +244,8 @@ class nnUNetTrainer(object):
 
             self.loss = self._build_loss(self.loss_fn, self.cldice_alpha, self.enable_deep_supervision)
             # torch 2.2.2 crashes upon compiling CE loss
-            # if self._do_i_compile():
-            #     self.loss = torch.compile(self.loss)
+            if self._do_i_compile():
+                self.loss = torch.compile(self.loss)
             self.was_initialized = True
         else:
             raise RuntimeError("You have called self.initialize even though the trainer was already initialized. "
@@ -427,8 +427,8 @@ class nnUNetTrainer(object):
                 loss = CE_cldice_loss(weight_cldice = cldice_alpha)
             elif loss_fn == 'CE_clCE':
                 loss = CE_clCE_loss(weight_clCE = cldice_alpha)
-        # if self._do_i_compile():
-        #     loss.dc = torch.compile(loss.dc)
+        if self._do_i_compile():
+            loss.dc = torch.compile(loss.dc)
 
         # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
         # this gives higher resolution outputs more weight in the loss
@@ -1267,10 +1267,6 @@ class nnUNetTrainer(object):
 
         with multiprocessing.get_context("spawn").Pool(default_num_processes) as segmentation_export_pool:
             worker_list = [i for i in segmentation_export_pool._pool]
-            # if validation_ckpt != None:
-            #     validation_output_folder = join(self.output_folder, 'validation', f'ckeckpoint_latest_{validation_ckpt}')
-            # else:
-            #     validation_output_folder = join(self.output_folder, 'validation', 'ckeckpoint_latest_200')
             validation_output_folder = join(self.output_folder, 'validation')
             maybe_mkdir_p(validation_output_folder)
             maybe_mkdir_p(join(validation_output_folder,'probability'))
@@ -1325,17 +1321,17 @@ class nnUNetTrainer(object):
                 prediction = prediction.cpu()
 
                 # this needs to go into background processes
-                results.append(
-                    segmentation_export_pool.starmap_async(
-                        export_prediction_from_logits, (
-                            (prediction, properties, self.configuration_manager, self.plans_manager,
-                             self.dataset_json, validation_output_folder, save_probabilities, k, validation_ckpt),
-                        )
-                    )
-                )
+                # results.append(
+                #     segmentation_export_pool.starmap_async(
+                #         export_prediction_from_logits, (
+                #             (prediction, properties, self.configuration_manager, self.plans_manager,
+                #              self.dataset_json, validation_output_folder, save_probabilities, k, validation_ckpt),
+                #         )
+                #     )
+                # )
                 # for debug purposes
-                # export_prediction(prediction_for_export, properties, self.configuration, self.plans, self.dataset_json,
-                #              output_filename_truncated, save_probabilities)
+                export_prediction_from_logits(prediction, properties, self.configuration_manager, self.plans_manager, self.dataset_json,
+                             validation_output_folder, save_probabilities, k, validation_ckpt)
 
                 # if needed, export the softmax prediction for the next stage
                 if next_stages is not None:
@@ -1400,21 +1396,21 @@ class nnUNetTrainer(object):
         self.on_train_start()
 
         for epoch in range(self.current_epoch, self.num_epochs):
-            self.on_epoch_start()
+            self.on_epoch_start() # epoch start time log
 
-            self.on_train_epoch_start()
+            self.on_train_epoch_start() # network.train()
             train_outputs = []
             for batch_id in range(self.num_iterations_per_epoch):
                 train_outputs.append(self.train_step(next(self.dataloader_train)))
-            self.on_train_epoch_end(train_outputs)
+            self.on_train_epoch_end(train_outputs) # mean train loss, log
 
             with torch.no_grad():
-                self.on_validation_epoch_start()
+                self.on_validation_epoch_start() # network.eval()
                 val_outputs = []
                 for batch_id in range(self.num_val_iterations_per_epoch):
-                    val_outputs.append(self.validation_step(next(self.dataloader_val)))
-                self.on_validation_epoch_end(val_outputs)
+                    val_outputs.append(self.validation_step(next(self.dataloader_val))) # loss, tp, tn, fp, fn
+                self.on_validation_epoch_end(val_outputs) # val_loss, mean_fg_dice, dice_per_class_or_region
 
-            self.on_epoch_end()
+            self.on_epoch_end() #print losses, model save, plot graph
 
         self.on_train_end()
