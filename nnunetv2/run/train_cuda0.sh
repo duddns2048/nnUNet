@@ -19,8 +19,8 @@
 
 # for i in $(seq 1 30)
 # do
-#     nnUNetv2_train 600 2d 1 -tr nnUNetTrainer_CE_DC_CBDC_NoDeepSupervision -exp_name CE_DC_CBDC_every1 --npz --val -validation_ckpt $i
+#     nnUNetv2_train 600 2d 1 -tr nnUNetTrainer_CE_DC_CBDC_NoDeepSupervision_NoMirroring -exp_name CE_DC_CBDC_NoDeep_NoMirr --npz --val -validation_ckpt $i
 # done
 
 
-nnUNetv2_train 600 2d 1 -tr nnUNetTrainer_CE_DC_CBDC_NoDeepSupervision_NoMirroring -exp_name CE_DC_CBDC_NoDeep_NoMirr -save_every 1 -num_epochs 30
+nnUNetv2_train 600 2d 1 -tr nnUNetTrainer -exp_name base --val -validation_ckpt 20
