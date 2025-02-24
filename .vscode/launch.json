@@ -15,16 +15,16 @@
                 "600",
                 "2d",
                 "1",
-                "-tr", "nnUNetTrainer_CE_DC_CBDC_NoDeepSupervision",
-                "-exp_name", "CE_DC_CBDC_every1", 
-                // "-save_every", "1", 
-                // "-num_epochs", "500", 
+                "-tr", "nnUNetTrainerSkeletonRecall",
+                "-exp_name", "skel_recall", 
+                "-save_every", "1", 
+                "-num_epochs", "30", 
                 // "-loss", "base",
                 // "-cldice_alpha", "0.5",
                 // "-enable_deep_supervision",
-                "--npz",
-                "--val",
-                "-validation_ckpt", "1"
+                // "--npz",
+                // "--val",
+                // "-validation_ckpt", "800"
         ]
         }
     ]

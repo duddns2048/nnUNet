@@ -232,9 +232,9 @@ class nnUNetTrainer(object):
                 self.enable_deep_supervision
             ).to(self.device)
             # compile network for free speedup
-            if self._do_i_compile():
-                self.print_to_log_file('Using torch.compile...')
-                self.network = torch.compile(self.network)
+            # if self._do_i_compile():
+            #     self.print_to_log_file('Using torch.compile...')
+            #     self.network = torch.compile(self.network)
 
             self.optimizer, self.lr_scheduler = self.configure_optimizers()
             # if ddp, wrap in DDP wrapper
@@ -244,8 +244,8 @@ class nnUNetTrainer(object):
 
             self.loss = self._build_loss(self.loss_fn, self.cldice_alpha, self.enable_deep_supervision)
             # torch 2.2.2 crashes upon compiling CE loss
-            if self._do_i_compile():
-                self.loss = torch.compile(self.loss)
+            # if self._do_i_compile():
+            #     self.loss = torch.compile(self.loss)
             self.was_initialized = True
         else:
             raise RuntimeError("You have called self.initialize even though the trainer was already initialized. "
@@ -427,8 +427,8 @@ class nnUNetTrainer(object):
                 loss = CE_cldice_loss(weight_cldice = cldice_alpha)
             elif loss_fn == 'CE_clCE':
                 loss = CE_clCE_loss(weight_clCE = cldice_alpha)
-        if self._do_i_compile():
-            loss.dc = torch.compile(loss.dc)
+        # if self._do_i_compile():
+        #     loss.dc = torch.compile(loss.dc)
 
         # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
         # this gives higher resolution outputs more weight in the loss
@@ -1167,7 +1167,7 @@ class nnUNetTrainer(object):
 
         # handling periodic checkpointing
         current_epoch = self.current_epoch
-        if (current_epoch + 1) % self.save_every == 0 and current_epoch != (self.num_epochs - 1):
+        if (current_epoch + 1) % self.save_every == 0:
             self.save_checkpoint(join(self.output_folder, f'checkpoint_latest_{current_epoch+1}.pth'))
 
         # handle 'best' checkpointing. ema_fg_dice is computed by the logger and can be accessed like this
