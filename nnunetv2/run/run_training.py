@@ -75,8 +75,6 @@ def get_trainer_from_args(dataset_name_or_id: Union[int, str],
                                     exp_name=exp_name,
                                     save_every=save_every,
                                     num_epochs=num_epochs,
-                                    loss=loss,
-                                    cldice_alpha=cldice_alpha,
                                     only_run_validation=only_run_validation,
                                     enable_deep_supervision=enable_deep_supervision)
     return nnunet_trainer

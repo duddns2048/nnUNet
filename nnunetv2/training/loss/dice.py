@@ -321,54 +321,6 @@ def soft_dice(y_pred, y_true):
     intersection = torch.sum((y_true * y_pred))
     coeff = (2. *  intersection + smooth) / (torch.sum(y_true) + torch.sum(y_pred) + smooth)
     return (1. - coeff)
-
-
-class soft_dice_cldice(nn.Module):
-    def __init__(self, apply_nonlin: Callable = None, batch_dice: bool = False, do_bg: bool = True, iter_=3, alpha=0.5, smooth = 1., exclude_background=False):
-        super(soft_dice_cldice, self).__init__()
-        self.iter = iter_
-        self.smooth = smooth
-        self.alpha = alpha
-        self.soft_skeletonize = SoftSkeletonize(num_iter=10)
-        self.do_bg = do_bg
-        
-        self.apply_nonlin = apply_nonlin
-
-    def forward(self, x, y, loss_mask=None):
-        shp_x, shp_y = x.shape, y.shape
-        
-        if self.apply_nonlin is not None:
-            x = self.apply_nonlin(x)
-            
-        if self.do_bg:
-            x = x[:, 1:]
-            
-        # axes = list(range(2, len(shp_x)))
-        
-        # with torch.no_grad():
-        #     if len(shp_x) != len(shp_y):
-        #         y = y.view((shp_y[0], 1, *shp_y[1:]))
-
-        #     if all([i == j for i, j in zip(shp_x, shp_y)]):
-        #         # if this is the case then gt is probably already a one hot encoding
-        #         y_onehot = y
-        #     else:
-        #         gt = y.long()
-        #         y_onehot = torch.zeros(shp_x, device=x.device, dtype=torch.bool)
-        #         y_onehot.scatter_(1, gt, 1)
-
-        #     if not self.do_bg:
-        #         y_onehot = y_onehot[:, 1:]
-        #     sum_gt = y_onehot.sum(axes) if loss_mask is None else (y_onehot * loss_mask).sum(axes)
-            
-        x_mask  = (x > 0.5).float()
-        dice = soft_dice(x, y)
-        x_skel = self.soft_skeletonize(x_mask)
-        y_skel = self.soft_skeletonize(y)
-        tprec = (torch.sum(torch.multiply(x_skel, y))+self.smooth)/(torch.sum(x_skel)+self.smooth)    
-        tsens = (torch.sum(torch.multiply(y_skel, x))+self.smooth)/(torch.sum(y_skel)+self.smooth)    
-        cl_dice = 1.- 2.0*(tprec*tsens)/(tprec+tsens)
-        return (1.0-self.alpha)*dice+self.alpha*cl_dice
     
 if __name__ == '__main__':
     from nnunetv2.utilities.helpers import softmax_helper_dim1

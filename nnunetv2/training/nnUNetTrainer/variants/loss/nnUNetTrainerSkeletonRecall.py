@@ -46,23 +46,19 @@ class nnUNetTrainerSkeletonRecall(nnUNetTrainer):
                  exp_name: str='',
                  save_every: int=10,
                  num_epochs: int=200,
-                 loss:str='base',
-                 cldice_alpha: float=0.5,
                  only_run_validation:bool=False,
                  enable_deep_supervision:bool=False):
         super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device,
                          exp_name,
                          save_every,
                          num_epochs,
-                         loss,
-                         cldice_alpha,
                          only_run_validation,
                          enable_deep_supervision)
         self.weight_srec = 1 # This is the default value, you can change it if you want
         if self.label_manager.has_regions:
             raise NotImplementedError("trainer not implemented for regions")
 
-    def _build_loss(self, loss_fn, cldice_alpha, enable_deep_supervision):
+    def _build_loss(self):
         if self.label_manager.ignore_label is not None:
             warnings.warn('Support for ignore label with Skeleton Recall is experimental and may not work as expected')
         loss = DC_SkelREC_and_CE_loss(soft_dice_kwargs={'batch_dice': self.configuration_manager.batch_dice, 

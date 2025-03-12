@@ -1,5 +1,5 @@
 import torch
-from nnunetv2.training.loss.dice import SoftDiceLoss, MemoryEfficientSoftDiceLoss, SoftSkeletonRecallLoss, soft_dice_cldice, SoftSkeletonize, soft_dice
+from nnunetv2.training.loss.dice import SoftDiceLoss, MemoryEfficientSoftDiceLoss, SoftSkeletonRecallLoss, SoftSkeletonize, soft_dice
 from nnunetv2.training.loss.robust_ce_loss import RobustCrossEntropyLoss, TopKLoss
 from nnunetv2.training.loss.b_dou_loss import BoundaryDoULoss
 from nnunetv2.utilities.helpers import softmax_helper_dim1
@@ -156,9 +156,8 @@ class DC_and_topk_loss(nn.Module):
         return result
 
 class soft_dice_cldice(nn.Module):
-    def __init__(self, do_bg: bool = True, iter_=3, alpha=0.5, smooth = 1.):
+    def __init__(self, do_bg: bool = False, alpha=0.5, smooth = 1.):
         super(soft_dice_cldice, self).__init__()
-        self.iter = iter_
         self.smooth = smooth
         self.alpha = alpha
         self.soft_skeletonize = SoftSkeletonize(num_iter=10)
@@ -167,7 +166,7 @@ class soft_dice_cldice(nn.Module):
         
         self.apply_nonlin = softmax_helper_dim1
 
-    def forward(self, x, y, loss_mask=None):
+    def forward(self, x, y):
         shp_x, shp_y = x.shape, y.shape
         
         if self.apply_nonlin is not None:
@@ -184,7 +183,6 @@ class soft_dice_cldice(nn.Module):
         tsens = (torch.sum(torch.multiply(y_skel, x))+self.smooth)/(torch.sum(y_skel)+self.smooth)    
         cl_dice = 1.- 2.0*(tprec*tsens)/(tprec+tsens)
         return (1.0-self.alpha)*dice+self.alpha*cl_dice
-#%% code block 1 here
 
 # Dice +clCE
 class dice_clCE_loss(nn.Module):

@@ -78,8 +78,6 @@ class nnUNetTrainer(object):
                  exp_name: str='',
                  save_every: int=10,
                  num_epochs: int=200,
-                 loss:str='base',
-                 cldice_alpha: float=0.5,
                  only_run_validation:bool=False,
                  enable_deep_supervision:bool=False):
         # From https://grugbrain.dev/. Worth a read ya big brains ;-)
@@ -162,7 +160,6 @@ class nnUNetTrainer(object):
         self.num_epochs = num_epochs
         self.current_epoch = 0
         self.enable_deep_supervision = enable_deep_supervision
-        self.cldice_alpha = cldice_alpha
 
         ### Dealing with labels/regions
         self.label_manager = self.plans_manager.get_label_manager(dataset_json)
@@ -174,7 +171,6 @@ class nnUNetTrainer(object):
         self.optimizer = self.lr_scheduler = None  # -> self.initialize
         self.grad_scaler = GradScaler() if self.device.type == 'cuda' else None
         self.loss = None  # -> self.initialize
-        self.loss_fn = loss
 
         ### Simple logging. Don't take that away from me!
         # initialize log file. This is just our log for the print statements etc. Not to be confused with lightning
@@ -232,9 +228,9 @@ class nnUNetTrainer(object):
                 self.enable_deep_supervision
             ).to(self.device)
             # compile network for free speedup
-            # if self._do_i_compile():
-            #     self.print_to_log_file('Using torch.compile...')
-            #     self.network = torch.compile(self.network)
+            if self._do_i_compile():
+                self.print_to_log_file('Using torch.compile...')
+                self.network = torch.compile(self.network)
 
             self.optimizer, self.lr_scheduler = self.configure_optimizers()
             # if ddp, wrap in DDP wrapper
@@ -242,10 +238,10 @@ class nnUNetTrainer(object):
                 self.network = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.network)
                 self.network = DDP(self.network, device_ids=[self.local_rank])
 
-            self.loss = self._build_loss(self.loss_fn, self.cldice_alpha, self.enable_deep_supervision)
+            self.loss = self._build_loss()
             # torch 2.2.2 crashes upon compiling CE loss
-            # if self._do_i_compile():
-            #     self.loss = torch.compile(self.loss)
+            if self._do_i_compile():
+                self.loss = torch.compile(self.loss)
             self.was_initialized = True
         else:
             raise RuntimeError("You have called self.initialize even though the trainer was already initialized. "
@@ -402,7 +398,7 @@ class nnUNetTrainer(object):
             self.batch_size = batch_size_per_GPU[my_rank]
             self.oversample_foreground_percent = oversample_percent
 
-    def _build_loss(self, loss_fn, cldice_alpha, enable_deep_supervision):
+    def _build_loss(self):
         if self.label_manager.has_regions:
             loss = DC_and_BCE_loss({},
                                    {'batch_dice': self.configuration_manager.batch_dice,
@@ -410,25 +406,13 @@ class nnUNetTrainer(object):
                                    use_ignore_label=self.label_manager.ignore_label is not None,
                                    dice_class=MemoryEfficientSoftDiceLoss)
         else:
-            if loss_fn == 'base':
-                loss = DC_and_CE_loss({'batch_dice': self.configuration_manager.batch_dice,
-                                    'smooth': 1e-5, 'do_bg': False, 'ddp': self.is_ddp}, {}, weight_ce=1, weight_dice=1,
-                                    ignore_label=self.label_manager.ignore_label, dice_class=MemoryEfficientSoftDiceLoss)        
-            elif loss_fn == 'only_ce':
-                loss = RobustCrossEntropyLoss()
-            elif loss_fn == 'only_dice':
-                loss = MemoryEfficientSoftDiceLoss(softmax_helper_dim1, self.configuration_manager.batch_dice,
-                                     False, 1e-5, self.is_ddp)
-            elif loss_fn == 'soft_dice_cldice':
-                loss = soft_dice_cldice(do_bg=False, alpha =cldice_alpha)
-            elif loss_fn == 'soft_dice_clCE':
-                loss = dice_clCE_loss(do_bg=False, weight_clCE = cldice_alpha)
-            elif loss_fn == 'CE_cldice':
-                loss = CE_cldice_loss(weight_cldice = cldice_alpha)
-            elif loss_fn == 'CE_clCE':
-                loss = CE_clCE_loss(weight_clCE = cldice_alpha)
-        # if self._do_i_compile():
-        #     loss.dc = torch.compile(loss.dc)
+            loss = DC_and_CE_loss({'batch_dice': self.configuration_manager.batch_dice,
+                                'smooth': 1e-5, 'do_bg': False, 'ddp': self.is_ddp}, {}, weight_ce=1, weight_dice=1,
+                                ignore_label=self.label_manager.ignore_label, dice_class=MemoryEfficientSoftDiceLoss)        
+            # elif loss_fn == 'soft_dice_cldice':
+            #     loss = soft_dice_cldice()
+        if self._do_i_compile():
+            loss.dc = torch.compile(loss.dc)
 
         # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
         # this gives higher resolution outputs more weight in the loss
@@ -1020,10 +1004,10 @@ class nnUNetTrainer(object):
         # If the device_type is 'mps' then it will complain that mps is not implemented, even if enabled=False is set. Whyyyyyyy. (this is why we don't make use of enabled=False)
         # So autocast will only be active if we have a cuda device.
         
-        with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
-            output = self.network(data)
-            # del data
-            l = self.loss(output, target)
+        # with autocast(self.device.type, enabled=True) if self.device.type == 'cuda' else dummy_context():
+        output = self.network(data)
+        # del data
+        l = self.loss(output, target)
 
         if self.grad_scaler is not None:
             self.grad_scaler.scale(l).backward()
@@ -1321,17 +1305,17 @@ class nnUNetTrainer(object):
                 prediction = prediction.cpu()
 
                 # this needs to go into background processes
-                # results.append(
-                #     segmentation_export_pool.starmap_async(
-                #         export_prediction_from_logits, (
-                #             (prediction, properties, self.configuration_manager, self.plans_manager,
-                #              self.dataset_json, validation_output_folder, save_probabilities, k, validation_ckpt),
-                #         )
-                #     )
-                # )
+                results.append(
+                    segmentation_export_pool.starmap_async(
+                        export_prediction_from_logits, (
+                            (prediction, properties, self.configuration_manager, self.plans_manager,
+                             self.dataset_json, validation_output_folder, save_probabilities, k, validation_ckpt),
+                        )
+                    )
+                )
                 # for debug purposes
-                export_prediction_from_logits(prediction, properties, self.configuration_manager, self.plans_manager, self.dataset_json,
-                             validation_output_folder, save_probabilities, k, validation_ckpt)
+                # export_prediction_from_logits(prediction, properties, self.configuration_manager, self.plans_manager, self.dataset_json,
+                #              validation_output_folder, save_probabilities, k, validation_ckpt)
 
                 # if needed, export the softmax prediction for the next stage
                 if next_stages is not None:

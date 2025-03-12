@@ -86,7 +86,7 @@ def compute_tp_fp_fn_tn(mask_ref: np.ndarray, mask_pred: np.ndarray, ignore_mask
     return tp, fp, fn, tn
 
 from skimage.morphology import skeletonize
-# from skimage.morphology import skeletonize, skeletonize_3d
+from skimage.morphology import skeletonize, skeletonize_3d
 import numpy as np
 
 def cl_score(v, s):
@@ -102,7 +102,7 @@ def cl_score(v, s):
     return np.sum(v*s)/np.sum(s)
 
 
-def clDice(v_p, v_l):
+def clDice(v_p, v_l, metric):
     """[this function computes the cldice metric]
 
     Args:
@@ -117,10 +117,16 @@ def clDice(v_p, v_l):
     if len(v_p.shape)==2:
         tprec = cl_score(v_p,skeletonize(v_l))
         tsens = cl_score(v_l,skeletonize(v_p))
-    # elif len(v_p.shape)==3:
-    #     tprec = cl_score(v_p,skeletonize_3d(v_l))
-    #     tsens = cl_score(v_l,skeletonize_3d(v_p))
-    return 2*tprec*tsens/(tprec+tsens)
+    elif len(v_p.shape)==3:
+        tprec = cl_score(v_p,skeletonize_3d(v_l))
+        tsens = cl_score(v_l,skeletonize_3d(v_p))
+    if metric=='clDice':
+        return 2*tprec*tsens/(tprec+tsens)
+    elif metric=='cl_prec':
+        return tprec
+    else:
+        return tsens
+    # return 2*tprec*tsens/(tprec+tsens)
 
 
 def compute_metrics(reference_file: str, prediction_file: str, image_reader_writer: BaseReaderWriter,
@@ -153,7 +159,9 @@ def compute_metrics(reference_file: str, prediction_file: str, image_reader_writ
         results['metrics'][r]['TN'] = tn
         results['metrics'][r]['n_pred'] = fp + tp
         results['metrics'][r]['n_ref'] = fn + tp
-        results['metrics'][r]['clDice'] = clDice(mask_ref, mask_pred)
+        results['metrics'][r]['clDice'] = clDice(mask_ref, mask_pred, 'clDice')
+        results['metrics'][r]['cl_prec'] = clDice(mask_ref, mask_pred, 'cl_prec')
+        results['metrics'][r]['cl_recall'] = clDice(mask_ref, mask_pred, 'cl_sens')
     return results
 
 
