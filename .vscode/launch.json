@@ -11,20 +11,21 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": false,
+            "RedirectOutput": true,
             "args": [
-                "600",
+                "610",
                 "2d",
-                "1",
-                "-tr", "nnUNetTrainerSkeletonRecall",
-                "-exp_name", "skel_recall", 
+                "0",
+                // "-tr", "nnUNetTrainerGnnUNet",
+                "-pretrained_weights", "../Datasets/datas/nnUNet_results/Dataset600_DRIVE/nnUNetTrainer__nnUNetPlans__2d_base/fold_0/checkpoint_latest_30.pth",
+                "-exp_name", "gnn_tmp", 
                 "-save_every", "1", 
                 "-num_epochs", "30", 
-                // "-loss", "base",
-                // "-cldice_alpha", "0.5",
                 // "-enable_deep_supervision",
                 // "--npz",
                 // "--val",
                 // "-validation_ckpt", "800"
+
         ]
         }
     ]

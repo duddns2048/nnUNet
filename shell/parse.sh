@@ -13,7 +13,7 @@
 # nnUNetv2_train 700 3d_fullres 3 -tr nnUNetTrainerDiceLoss -exp_name only_dice -save_every 50 -num_epochs 1000
 # nnUNetv2_train 700 3d_fullres 1 -tr nnUNetTrainerCELoss -exp_name only_ce -save_every 50 -num_epochs 1000
 
-nnUNetv2_train 700 3d_fullres 0 -tr nnUNetTrainer_CE_DC_CLDC -exp_name 2CE_1DC_1cldice -save_every 1 -num_epochs 30
+nnUNetv2_train 700 3d_fullres 0 -tr nnUNetTrainer_CE_DC_CLDC -exp_name 2CE_1DC_1mcldice -save_every 50 -num_epochs 1000
 
 # valid
 # nnUNetv2_train 700 3d_fullres 3 -tr nnUNetTrainerDiceLoss -exp_name only_dice --val --npz -validation_ckpt 1000
