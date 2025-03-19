@@ -13,18 +13,18 @@
             "justMyCode": false,
             "RedirectOutput": true,
             "args": [
-                "610",
-                "2d",
+                "700",
+                "3d_fullres",
                 "0",
-                // "-tr", "nnUNetTrainerGnnUNet",
-                "-pretrained_weights", "../Datasets/datas/nnUNet_results/Dataset600_DRIVE/nnUNetTrainer__nnUNetPlans__2d_base/fold_0/checkpoint_latest_30.pth",
-                "-exp_name", "gnn_tmp", 
-                "-save_every", "1", 
-                "-num_epochs", "30", 
+                "-tr", "nnUNetTrainer_topo_CLDC",
+                "-exp_name", "2CE_1DC_1topo-cldice", 
+                "-save_every", "50", 
+                "-num_epochs", "1000", 
                 // "-enable_deep_supervision",
                 // "--npz",
                 // "--val",
                 // "-validation_ckpt", "800"
+                // "--c"
 
         ]
         }

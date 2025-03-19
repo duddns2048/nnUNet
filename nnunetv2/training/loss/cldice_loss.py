@@ -13,7 +13,7 @@ class SoftclDiceLoss(torch.nn.Module):
         # Morphological skeletonization: https://github.com/jocpae/clDice/tree/master/cldice_loss/pytorch
         self.m_skeletonize = SoftSkeletonize(num_iter=iter_)
 
-    def forward(self, y_pred, y_true, t_skeletonize_flage=False):
+    def forward(self, y_pred, y_true, t_skeletonize_flag=True):
         """
         Forward pass for the loss function.
         
@@ -32,7 +32,7 @@ class SoftclDiceLoss(torch.nn.Module):
             y_true = torch.where(y_true > 0, 1, 0).squeeze(1).float() # ground truth of foreground
             y_pred_hard = (y_pred_prob > 0.5).float()
         
-            if t_skeletonize_flage:
+            if t_skeletonize_flag:
                 skel_pred_hard = self.t_skeletonize(y_pred_hard.unsqueeze(1)).squeeze(1)
                 skel_true = self.t_skeletonize(y_true.unsqueeze(1)).squeeze(1)
             else:

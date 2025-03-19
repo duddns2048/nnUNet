@@ -40,7 +40,6 @@ def get_trainer_from_args(dataset_name_or_id: Union[int, str],
                           save_every: int=10,
                           num_epochs: int=200,
                           loss:str='base',
-                          cldice_alpha: float=0.5,
                           only_run_validation:str='',
                           enable_deep_supervision:bool=False):
     # load nnunet class and do sanity checks
@@ -170,7 +169,6 @@ def run_training(dataset_name_or_id: Union[str, int],
                  save_every: int=10,
                  num_epochs:int=200,
                  loss:str='base',
-                 cldice_alpha: float=0.5,
                  enable_deep_supervision:bool=False):
     if plans_identifier == 'nnUNetPlans':
         print("\n############################\n"
@@ -222,7 +220,6 @@ def run_training(dataset_name_or_id: Union[str, int],
                                                save_every=save_every, 
                                                num_epochs=num_epochs, 
                                                loss=loss, 
-                                               cldice_alpha=cldice_alpha, 
                                                only_run_validation=only_run_validation,
                                                enable_deep_supervision = enable_deep_supervision)
 
@@ -264,8 +261,6 @@ def run_training_entry():
                         help='Number of epochs')
     parser.add_argument('-loss', default='base', type=str,
                         help='Select loss function')
-    parser.add_argument('-cldice_alpha', default=0.5, type=float,
-                        help='cldice alpha value')
     parser.add_argument('-enable_deep_supervision', action='store_true', required=False,
                         help='[OPTIONAL] if flaged, enable_deep_supervision')
     parser.add_argument('-tr', type=str, required=False, default='nnUNetTrainer',
@@ -335,7 +330,6 @@ def run_training_entry():
                  save_every=args.save_every,
                  num_epochs=args.num_epochs,
                  loss = args.loss,
-                 cldice_alpha=args.cldice_alpha,
                  enable_deep_supervision=args.enable_deep_supervision)
 
 
