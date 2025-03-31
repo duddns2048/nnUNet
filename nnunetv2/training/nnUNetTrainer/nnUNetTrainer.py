@@ -229,7 +229,7 @@ class nnUNetTrainer(object):
             ).to(self.device)
             # compile network for free speedup
             if self._do_i_compile():
-                self.print_to_log_file('Using torch.compile...')
+                self.print_to_log_file('Using torch.compil...')
                 self.network = torch.compile(self.network)
 
             self.optimizer, self.lr_scheduler = self.configure_optimizers()
@@ -240,8 +240,8 @@ class nnUNetTrainer(object):
 
             self.loss = self._build_loss()
             # torch 2.2.2 crashes upon compiling CE loss
-            if self._do_i_compile():
-                self.loss = torch.compile(self.loss)
+            # if self._do_i_compile():
+            #     self.loss = torch.compile(self.loss)
             self.was_initialized = True
         else:
             raise RuntimeError("You have called self.initialize even though the trainer was already initialized. "
@@ -253,20 +253,20 @@ class nnUNetTrainer(object):
         # compile does not work on mps
         if self.device == torch.device('mps'):
             if 'nnUNet_compile' in os.environ.keys() and os.environ['nnUNet_compile'].lower() in ('true', '1', 't'):
-                self.print_to_log_file("INFO: torch.compile disabled because of unsupported mps device")
+                self.print_to_log_file("INFO: torch.compil disabled because of unsupported mps device")
             return False
 
         # CPU compile crashes for 2D models. Not sure if we even want to support CPU compile!? Better disable
         if self.device == torch.device('cpu'):
             if 'nnUNet_compile' in os.environ.keys() and os.environ['nnUNet_compile'].lower() in ('true', '1', 't'):
-                self.print_to_log_file("INFO: torch.compile disabled because device is CPU")
+                self.print_to_log_file("INFO: torch.compil disabled because device is CPU")
             return False
 
-        # default torch.compile doesn't work on windows because there are apparently no triton wheels for it
+        # default torch.compil doesn't work on windows because there are apparently no triton wheels for it
         # https://discuss.pytorch.org/t/windows-support-timeline-for-torch-compile/182268/2
         if os.name == 'nt':
             if 'nnUNet_compile' in os.environ.keys() and os.environ['nnUNet_compile'].lower() in ('true', '1', 't'):
-                self.print_to_log_file("INFO: torch.compile disabled because Windows is not natively supported. If "
+                self.print_to_log_file("INFO: torch.compil disabled because Windows is not natively supported. If "
                                        "you know what you are doing, check https://discuss.pytorch.org/t/windows-support-timeline-for-torch-compile/182268/2")
             return False
 
@@ -409,10 +409,8 @@ class nnUNetTrainer(object):
             loss = DC_and_CE_loss({'batch_dice': self.configuration_manager.batch_dice,
                                 'smooth': 1e-5, 'do_bg': False, 'ddp': self.is_ddp}, {}, weight_ce=1, weight_dice=1,
                                 ignore_label=self.label_manager.ignore_label, dice_class=MemoryEfficientSoftDiceLoss)        
-            # elif loss_fn == 'soft_dice_cldice':
-            #     loss = soft_dice_cldice()
-        if self._do_i_compile():
-            loss.dc = torch.compile(loss.dc)
+        # if self._do_i_compile():
+        #     loss.dc = torch.compile(loss.dc)
 
         # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
         # this gives higher resolution outputs more weight in the loss
@@ -422,7 +420,7 @@ class nnUNetTrainer(object):
             weights = np.array([1 / (2 ** i) for i in range(len(deep_supervision_scales))])
             if self.is_ddp and not self._do_i_compile():
                 # very strange and stupid interaction. DDP crashes and complains about unused parameters due to
-                # weights[-1] = 0. Interestingly this crash doesn't happen with torch.compile enabled. Strange stuff.
+                # weights[-1] = 0. Interestingly this crash doesn't happen with torch.compil enabled. Strange stuff.
                 # Anywho, the simple fix is to set a very low weight to this.
                 weights[-1] = 1e-6
             else:
@@ -1233,8 +1231,8 @@ class nnUNetTrainer(object):
         self.network.eval()
 
         if self.is_ddp and self.batch_size == 1 and self.enable_deep_supervision and self._do_i_compile():
-            self.print_to_log_file("WARNING! batch size is 1 during training and torch.compile is enabled. If you "
-                                   "encounter crashes in validation then this is because torch.compile forgets "
+            self.print_to_log_file("WARNING! batch size is 1 during training and torch.compil is enabled. If you "
+                                   "encounter crashes in validation then this is because torch.compil forgets "
                                    "to trigger a recompilation of the model with deep supervision disabled. "
                                    "This causes torch.flip to complain about getting a tuple as input. Just rerun the "
                                    "validation with --val (exactly the same as before) and then it will work. "
